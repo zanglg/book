@@ -1,0 +1,23 @@
+
+html {
+    font-family: serif;
+}
+
+code {
+    font-family: monospace !important;
+}
+
+nav#sidebar.sidebar {
+    border-right: solid 1px var(--table-border-color);
+}
+
+h2, h3, h4, h5, h6 {
+    border-bottom: solid 1px var(--table-border-color);
+    padding-bottom: .3em;
+}
+
+.content img, .content video {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
