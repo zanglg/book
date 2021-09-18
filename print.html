@@ -84,7 +84,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="chapter_1.html"><strong aria-hidden="true">1.</strong> Chapter 1</a></li></ol>            </div>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="arm64_emulation.html"><strong aria-hidden="true">1.</strong> ARM64 Emulation</a></li></ol>            </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
 
@@ -145,7 +145,165 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="chapter-1"><a class="header" href="#chapter-1">Chapter 1</a></h1>
+                        <h1 id="arm64-emulation"><a class="header" href="#arm64-emulation">ARM64 Emulation</a></h1>
+<p>This document will detail the steps involved in setting up a mini
+aarch64 running environment with Qemu.</p>
+<p>All the operation was tested on a machine of ubuntu 18.04 and we assume
+that all the source code was put into a same directory, like <code>$HOME</code>.</p>
+<h2 id="get-arm64-toolchain"><a class="header" href="#get-arm64-toolchain">Get ARM64 Toolchain</a></h2>
+<p>You will require an arm64 toolchain, install from the ubuntu package
+manager:</p>
+<pre><code class="language-bash">sudo apt-get install gcc-aarch64-linux-gnu
+</code></pre>
+<h2 id="build-qemu"><a class="header" href="#build-qemu">Build Qemu</a></h2>
+<ul>
+<li>
+<p>Clone the mainline qemu git tree:</p>
+<pre><code class="language-bash">git clone http://git.qemu.org/qemu.git
+</code></pre>
+</li>
+<li>
+<p>change to directory qemu:</p>
+<pre><code class="language-bash">cd qemu
+</code></pre>
+</li>
+<li>
+<p>Install the dependencies tool of qemu:</p>
+<pre><code class="language-bash">sudo apt-get build-dep qemu
+</code></pre>
+</li>
+<li>
+<p>Make a standalone building directory:</p>
+<pre><code class="language-bash">mkdir build &amp;&amp; cd build
+</code></pre>
+</li>
+<li>
+<p>Set to build and compile only for arm64:</p>
+<pre><code class="language-bash">../configure --target-list=aarch64-softmmu
+</code></pre>
+</li>
+<li>
+<p>Building:</p>
+<pre><code class="language-bash">make
+</code></pre>
+</li>
+</ul>
+<p>Waiting for build finished and qemu-system-aarch64 will be in the
+directory of build/aarch64-softmmu.</p>
+<h2 id="build-kernel"><a class="header" href="#build-kernel">Build Kernel</a></h2>
+<ul>
+<li>
+<p>Get the source code from kernel.org:</p>
+<pre><code class="language-bash">git clone https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
+</code></pre>
+</li>
+<li>
+<p>change to directory linux:</p>
+<pre><code class="language-bash">cd linux
+</code></pre>
+</li>
+<li>
+<p>There are few tools that are necessary in order to build kernel
+Image. You will need to install them:</p>
+<pre><code class="language-bash">sudo apt-get install git fakeroot build-essential ncurses-dev xz-utils \
+   libssl-dev bc flex libelf-dev bison
+</code></pre>
+</li>
+<li>
+<p>Use the defconfig of ARCH arm64:</p>
+<pre><code class="language-bash">make ARCH=arm64 CROSS_COMPLIE=aarch64-linux-gnu- defconfig
+</code></pre>
+</li>
+<li>
+<p>Building:</p>
+<pre><code class="language-bash">make ARCH=arm64 CROSS_COMPLIE=aarch64-linux-gnu- Image
+</code></pre>
+</li>
+</ul>
+<p>Waiting for build finished and <code>arch/arm64/boot/Image</code> was what we need.</p>
+<h2 id="make-rootfs"><a class="header" href="#make-rootfs">Make Rootfs</a></h2>
+<p>There are many tools to make a rootfs, we here select to use busybox,
+because it is simple and easier. All we need is a staticly build busybox
+binary, a few init script.</p>
+<ul>
+<li>
+<p>Get the busybox source code:</p>
+<pre><code class="language-bash">git clone https://git.busybox.net/busybox
+</code></pre>
+</li>
+<li>
+<p>Change to directory busybox:</p>
+<pre><code class="language-bash">cd busybox
+</code></pre>
+</li>
+<li>
+<p>Build as an statndalone binary, <code>make menuconfig ARCH=arm64</code>, set
+follows and save:</p>
+<pre><code class="language-bash">Settings  ---&gt;
+   [*] Build static binary (no shared libs)
+</code></pre>
+</li>
+<li>
+<p>Building:</p>
+<pre><code class="language-bash">make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- install
+</code></pre>
+</li>
+</ul>
+<p>Waiting for build finished, output was in folder <code>_install</code>. Next we
+create a simpile boot script.</p>
+<ul>
+<li>
+<p>Change to output folder:</p>
+<pre><code class="language-bash">cd _install
+</code></pre>
+</li>
+<li>
+<p>Make basic directory:</p>
+<pre><code class="language-bash">mkdir etc proc sys
+</code></pre>
+</li>
+<li>
+<p>Create the one init RC script <code>rcS</code>:</p>
+<pre><code class="language-bash">touch etc/init.d/rcS
+</code></pre>
+</li>
+<li>
+<p>Copy the following content to <code>rcS</code>:</p>
+<pre><code class="language-bash">#!/bin/busybox sh
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+
+mdev -s
+</code></pre>
+</li>
+<li>
+<p>Change <code>rcS</code> to executable:</p>
+<pre><code class="language-bash">chmod a+x etc/init.d/rcS
+</code></pre>
+</li>
+<li>
+<p>Make initrd(make sure we are now in _install folder):</p>
+<pre><code class="language-bash">find . -print0 |                                                           \
+   cpio --null --create --verbose --owner root:root --format=newc &gt;        \
+   ../initramdisk.cpio
+</code></pre>
+</li>
+</ul>
+<p>The initramdisk.cpio under busybox's root directory was what we want.</p>
+<h2 id="run-emulator"><a class="header" href="#run-emulator">Run emulator</a></h2>
+<p>Now, we have got all the preparation done, jump to the root folder where
+linux, busybox and qemu exist, run:</p>
+<pre><code class="language-bash">qemu/build/qemu-system-aarch64                                            \
+    -nographic                                                            \
+    -M virt                                                               \
+    -m 1024                                                               \
+    -cpu cortex-a57                                                       \
+    -smp 2                                                                \
+    -kernel linux/arch/arm64/boot/Image                                   \
+    -append &quot;rdinit=/linuxrc&quot;                                             \
+    -initrd busybox/initramdisk.cpio
+</code></pre>
 
                     </main>
 
